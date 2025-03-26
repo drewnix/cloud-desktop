@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-desktop
+  labels:
+    app: cloud-desktop
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud-desktop
+  template:
+    metadata:
+      labels:
+        app: cloud-desktop
+    spec:
+      containers:
+      - name: cloud-desktop
+        image: cloud-desktop:latest
+        ports:
+        - containerPort: 5901
+          name: vnc
+        - containerPort: 3389
+          name: rdp
+        - containerPort: 6080
+          name: novnc
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "2000m"
+        volumeMounts:
+        - name: kube-config
+          mountPath: /home/clouduser/.kube
+          readOnly: true
+        - name: user-home
+          mountPath: /home/clouduser
+      volumes:
+      - name: kube-config
+        secret:
+          secretName: kube-config-secret
+          optional: true
+      - name: user-home
+        persistentVolumeClaim:
+          claimName: cloud-desktop-home
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-desktop
+spec:
+  selector:
+    app: cloud-desktop
+  ports:
+  - port: 5901
+    targetPort: 5901
+    name: vnc
+  - port: 3389
+    targetPort: 3389
+    name: rdp
+  - port: 6080
+    targetPort: 6080
+    name: novnc
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cloud-desktop
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/websocket-services: "cloud-desktop"
+spec:
+  rules:
+  - host: cloud-desktop.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: cloud-desktop
+            port:
+              number: 6080
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cloud-desktop-home
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard

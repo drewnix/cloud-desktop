@@ -1,0 +1,30 @@
+# Docker build context
+.dockerignore
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*~
+
+# Build artifacts
+build/
+dist/
+
+# Logs
+*.log
+logs/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDE specific files
+.idea/
+.vscode/
+*.sublime-*

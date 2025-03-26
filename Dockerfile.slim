@@ -1,0 +1,55 @@
+FROM debian:bookworm-slim AS base
+
+# Avoid prompts from apt
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install minimal dependencies
+RUN apt-get update && apt-get install -y \
+    sudo \
+    curl \
+    wget \
+    git \
+    vim \
+    nano \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    python3 \
+    unzip \
+    --no-install-recommends \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up a non-root user
+RUN useradd -m -s /bin/bash clouduser \
+    && echo "clouduser:password" | chpasswd \
+    && usermod -aG sudo clouduser \
+    && mkdir -p /home/clouduser/.kube
+
+# Cloud tools setup
+WORKDIR /tmp/tools
+
+# Install kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+# Install helm
+RUN curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 \
+    && chmod 700 get_helm.sh \
+    && ./get_helm.sh
+
+# Install Terraform
+RUN curl -fsSL -o terraform.zip https://releases.hashicorp.com/terraform/1.7.5/terraform_1.7.5_linux_amd64.zip \
+    && unzip terraform.zip \
+    && install -o root -g root -m 0755 terraform /usr/local/bin/terraform \
+    && rm terraform.zip
+
+# Install yq
+RUN curl -L -o /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 \
+    && chmod +x /usr/local/bin/yq
+
+# Basic entrypoint
+COPY scripts/entrypoint-slim.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
