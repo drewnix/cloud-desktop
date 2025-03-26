@@ -77,11 +77,13 @@ run-detached:
 		-p 5901:5901 \
 		-p 3389:3389 \
 		-p 6080:6080 \
+		--restart unless-stopped \
 		$(FULL_IMAGE_NAME)
 	@echo "Container started. Access via:"
 	@echo "  - VNC: localhost:5901"
 	@echo "  - RDP: localhost:3389"
 	@echo "  - Web: http://localhost:6080/vnc.html"
+	@echo "Container logs can be viewed with: docker logs $(CONTAINER_NAME)"
 
 stop:
 	@echo "Stopping container $(CONTAINER_NAME)..."

@@ -47,6 +47,7 @@ RUN apt-get update && apt-get install -y \
     firefox-esr \
     xrdp \
     dbus-x11 \
+    xterm \
     --no-install-recommends \
     && apt-get install -y tigervnc-standalone-server 2>/dev/null || apt-get install -y tigervnc-server || apt-get install -y tigervnc-common \
     && apt-get clean \

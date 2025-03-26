@@ -7,41 +7,117 @@ VNC_DEPTH=${VNC_DEPTH:-24}
 
 echo "Configuring VNC with geometry $VNC_GEOMETRY and depth $VNC_DEPTH"
 
-# Create default .Xresources file if it doesn't exist to avoid VNC errors
-function setup_vnc_env() {
-  if [ ! -f "$HOME/.Xresources" ]; then
-    touch "$HOME/.Xresources"
-  fi
-  if [ ! -d "$HOME/.vnc" ]; then
-    mkdir -p "$HOME/.vnc"
+# Prepare XFCE environment
+prepare_xfce() {
+  # Create basic xfce config
+  mkdir -p "$HOME/.config/xfce4/xfconf/xfce-perchannel-xml"
+  cat > "$HOME/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-desktop" version="1.0">
+  <property name="backdrop" type="empty">
+    <property name="screen0" type="empty">
+      <property name="monitor0" type="empty">
+        <property name="workspace0" type="empty">
+          <property name="color-style" type="int" value="0"/>
+          <property name="image-style" type="int" value="5"/>
+          <property name="last-image" type="string" value="/usr/share/backgrounds/xfce/xfce-blue.jpg"/>
+        </property>
+      </property>
+    </property>
+  </property>
+</channel>
+EOF
+
+  # Create a startup script for XFCE
+  echo "#!/bin/bash" > "$HOME/.vnc/xstartup"
+  echo "[ -r \$HOME/.Xresources ] && xrdb \$HOME/.Xresources" >> "$HOME/.vnc/xstartup"
+  echo "startxfce4 &" >> "$HOME/.vnc/xstartup"
+  chmod +x "$HOME/.vnc/xstartup"
+}
+
+# Create a basic xterm-only startup script
+prepare_xterm() {
+  echo "#!/bin/bash" > "$HOME/.vnc/xstartup"
+  echo "[ -r \$HOME/.Xresources ] && xrdb \$HOME/.Xresources" >> "$HOME/.vnc/xstartup"
+  echo "xterm &" >> "$HOME/.vnc/xstartup"
+  chmod +x "$HOME/.vnc/xstartup"
+}
+
+# Setup VNC environment
+setup_vnc_env() {
+  # Create necessary dirs and files
+  mkdir -p "$HOME/.vnc"
+  touch "$HOME/.Xauthority"
+  touch "$HOME/.Xresources"
+  
+  # Choose setup based on available desktop environment
+  if [ -x "$(command -v startxfce4)" ]; then
+    prepare_xfce
+  else
+    prepare_xterm
   fi
 }
 
 # Run as clouduser if root
 if [ "$(id -u)" = "0" ]; then
   echo "Running as root - switching to clouduser for VNC session"
-  # Create necessary files for clouduser
-  if [ ! -f "/home/clouduser/.Xresources" ]; then
-    touch /home/clouduser/.Xresources
-    chown clouduser:clouduser /home/clouduser/.Xresources
-  fi
-  # Make sure XFCE is installed before starting vnc server
+  
+  # Setup environment for clouduser
+  mkdir -p /home/clouduser/.vnc
+  touch /home/clouduser/.Xauthority
+  touch /home/clouduser/.Xresources
+  
   if [ -x "$(command -v startxfce4)" ]; then
-    su - clouduser -c "vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH -localhost no"
+    # Setup XFCE for clouduser
+    mkdir -p /home/clouduser/.config/xfce4/xfconf/xfce-perchannel-xml
+    cat > /home/clouduser/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-desktop.xml << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-desktop" version="1.0">
+  <property name="backdrop" type="empty">
+    <property name="screen0" type="empty">
+      <property name="monitor0" type="empty">
+        <property name="workspace0" type="empty">
+          <property name="color-style" type="int" value="0"/>
+          <property name="image-style" type="int" value="5"/>
+          <property name="last-image" type="string" value="/usr/share/backgrounds/xfce/xfce-blue.jpg"/>
+        </property>
+      </property>
+    </property>
+  </property>
+</channel>
+EOF
+    
+    # Create a startup script for XFCE
+    echo "#!/bin/bash" > /home/clouduser/.vnc/xstartup
+    echo "[ -r \$HOME/.Xresources ] && xrdb \$HOME/.Xresources" >> /home/clouduser/.vnc/xstartup
+    echo "startxfce4 &" >> /home/clouduser/.vnc/xstartup
   else
-    echo "XFCE not found, starting VNC with basic X session"
-    su - clouduser -c "vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH -localhost no -xstartup /usr/bin/xterm"
+    # Create a basic xterm-only startup script
+    echo "#!/bin/bash" > /home/clouduser/.vnc/xstartup
+    echo "[ -r \$HOME/.Xresources ] && xrdb \$HOME/.Xresources" >> /home/clouduser/.vnc/xstartup
+    echo "xterm &" >> /home/clouduser/.vnc/xstartup
+  fi
+  
+  # Ensure correct permissions
+  chmod +x /home/clouduser/.vnc/xstartup
+  chown -R clouduser:clouduser /home/clouduser/.vnc
+  chown clouduser:clouduser /home/clouduser/.Xauthority /home/clouduser/.Xresources
+  [ -d /home/clouduser/.config ] && chown -R clouduser:clouduser /home/clouduser/.config
+  
+  # Start VNC server
+  if command -v xterm >/dev/null 2>&1; then
+    # First try with a simple xterm as a fallback
+    su - clouduser -c "DISPLAY=:1 vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH -localhost no -xstartup /usr/bin/xterm"
+  else
+    # Fallback to a very basic session if even xterm is not available
+    su - clouduser -c "DISPLAY=:1 vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH -localhost no"
   fi
 else
-  # Create necessary files for the current user
+  # Setup environment for the current user
   setup_vnc_env
+  
   # Start VNC server with the current user
-  if [ -x "$(command -v startxfce4)" ]; then
-    vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH -localhost no
-  else
-    echo "XFCE not found, starting VNC with basic X session"
-    vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH -localhost no -xstartup /usr/bin/xterm
-  fi
+  vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH -localhost no
 fi
 
 # Start xrdp (must be run as root)
@@ -82,5 +158,53 @@ echo "  RDP: hostname:3389"
 echo "  Web: http://hostname:6080/vnc.html"
 echo "========================================"
 
+# Create a healthcheck file
+if [ "$(id -u)" = "0" ]; then
+  touch /tmp/healthy
+  chmod 777 /tmp/healthy
+  
+  # Add a healthcheck script
+  cat > /usr/local/bin/healthcheck.sh << 'EOF'
+#!/bin/bash
+# Check if VNC is running
+if ! pgrep -f Xtigervnc > /dev/null; then
+  echo "VNC server is not running!"
+  exit 1
+fi
+
+# Check if noVNC is running
+if ! pgrep -f novnc_proxy > /dev/null; then
+  echo "noVNC proxy is not running!"
+  exit 1
+fi
+
+# Check if XRDP is running
+if ! ps aux | grep xrdp | grep -v grep > /dev/null; then
+  echo "XRDP is not running!"
+  exit 1
+fi
+
+# All services are running
+touch /tmp/healthy
+echo "All services are running"
+exit 0
+EOF
+  chmod +x /usr/local/bin/healthcheck.sh
+  
+  # Run healthcheck periodically
+  (while true; do /usr/local/bin/healthcheck.sh; sleep 30; done) &
+fi
+
 # Keep the container running
-tail -f /dev/null
+echo "Cloud Desktop is now running! Press Ctrl+C to stop."
+trap 'echo "Shutting down..."; exit 0' TERM INT
+while true; do
+  sleep 1
+  # Exit if VNC server dies
+  if [ "$(id -u)" = "0" ]; then
+    if ! pgrep -f Xtigervnc > /dev/null; then
+      echo "VNC server has stopped, shutting down container..."
+      exit 1
+    fi
+  fi
+done
